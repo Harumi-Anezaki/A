@@ -1,53 +1,58 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/todo.dart';
 import 'database_provider.dart';
 
 final todoListProvider = StateNotifierProvider<TodoListNotifier, List<Todo>>((ref) {
-  final isar = ref.watch(databaseProvider);
-  return TodoListNotifier(isar);
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return TodoListNotifier(prefs);
 });
 
 class TodoListNotifier extends StateNotifier<List<Todo>> {
-  final Isar _isar;
+  final SharedPreferences _prefs;
 
-  TodoListNotifier(this._isar) : super([]) {
+  TodoListNotifier(this._prefs) : super([]) {
     _loadTodos();
   }
 
-  Future<void> _loadTodos() async {
-    final todos = await _isar.todos.where().sortBySortOrder().findAll();
-    state = todos;
+  void _loadTodos() {
+    final List<String>? todosJson = _prefs.getStringList('todos');
+    if (todosJson != null) {
+      final todos = todosJson.map((json) => Todo.fromJson(json)).toList();
+      todos.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      state = todos;
+    }
   }
 
-  Future<void> addTodo(String title, String category, DateTime? dueDate) async {
-    final newTodo = Todo()
-      ..title = title
-      ..category = category
-      ..dueDate = dueDate
-      ..sortOrder = state.length;
-
-    await _isar.writeTxn(() async {
-      await _isar.todos.put(newTodo);
-    });
-    await _loadTodos();
+  Future<void> _saveTodos(List<Todo> todos) async {
+    final List<String> todosJson = todos.map((todo) => todo.toJson()).toList();
+    await _prefs.setStringList('todos', todosJson);
   }
 
-  Future<void> updateTodo(Todo todo) async {
-    await _isar.writeTxn(() async {
-      await _isar.todos.put(todo);
-    });
-    await _loadTodos();
+  void addTodo(String title, String category, DateTime? dueDate) {
+    final newTodo = Todo(
+      id: DateTime.now().millisecondsSinceEpoch,
+      title: title,
+      category: category,
+      dueDate: dueDate,
+      sortOrder: state.length,
+    );
+
+    state = [...state, newTodo];
+    _saveTodos(state);
   }
 
-  Future<void> deleteTodo(int id) async {
-    await _isar.writeTxn(() async {
-      await _isar.todos.delete(id);
-    });
-    await _loadTodos();
+  void updateTodo(Todo updatedTodo) {
+    state = state.map((todo) => todo.id == updatedTodo.id ? updatedTodo : todo).toList();
+    _saveTodos(state);
   }
 
-  Future<void> reorder(int oldIndex, int newIndex) async {
+  void deleteTodo(int id) {
+    state = state.where((todo) => todo.id != id).toList();
+    _saveTodos(state);
+  }
+
+  void reorder(int oldIndex, int newIndex) {
     final todos = [...state];
     if (newIndex > oldIndex) {
       newIndex -= 1;
@@ -55,14 +60,12 @@ class TodoListNotifier extends StateNotifier<List<Todo>> {
     final item = todos.removeAt(oldIndex);
     todos.insert(newIndex, item);
 
-    // Update sortOrder in DB
-    await _isar.writeTxn(() async {
-      for (int i = 0; i < todos.length; i++) {
-        todos[i].sortOrder = i;
-        await _isar.todos.put(todos[i]);
-      }
-    });
+    // Update sortOrder
+    for (int i = 0; i < todos.length; i++) {
+      todos[i].sortOrder = i;
+    }
 
     state = todos;
+    _saveTodos(state);
   }
 }
