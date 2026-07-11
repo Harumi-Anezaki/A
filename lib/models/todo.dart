@@ -1,33 +1,18 @@
-import 'dart:convert';
+import 'package:isar/isar.dart';
 
+part 'todo.g.dart';
+
+@collection
 class Todo {
-  final String id;
-  String title;
-  bool isCompleted;
+  Id id = Isar.autoIncrement;
 
-  Todo({
-    required this.id,
-    required this.title,
-    this.isCompleted = false,
-  });
+  late String title;
+  
+  bool isCompleted = false;
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'isCompleted': isCompleted,
-    };
-  }
+  DateTime? dueDate;
 
-  factory Todo.fromMap(Map<String, dynamic> map) {
-    return Todo(
-      id: map['id'] ?? '',
-      title: map['title'] ?? '',
-      isCompleted: map['isCompleted'] ?? false,
-    );
-  }
+  String category = 'Inbox';
 
-  String toJson() => json.encode(toMap());
-
-  factory Todo.fromJson(String source) => Todo.fromMap(json.decode(source));
+  int sortOrder = 0; // For reordering
 }
